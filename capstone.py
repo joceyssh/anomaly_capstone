@@ -29,3 +29,36 @@ print(df["anomaly_score"].value_counts())
 
 comparison = pd.crosstab(df["Class"], df["anomaly_score"])
 print(comparison)
+
+import csv
+from datetime import datetime
+
+# Log every flagged anomaly with a timestamp
+log_path = project_root / "logs" / "flagged_transactions.csv"
+
+flagged = df[df["anomaly_score"] == -1].copy()
+flagged["logged_at"] = datetime.now().isoformat()
+
+flagged[["Time", "Amount", "Class", "anomaly_score", "logged_at"]].to_csv(
+    log_path, index=False
+)
+
+print(f"Logged {len(flagged)} flagged transactions to {log_path}")
+
+# Drift check: flag rate across time windows
+df["time_window"] = pd.cut(df["Time"], bins=10)
+drift_check = df.groupby("time_window", observed=True)["anomaly_score"].apply(
+    lambda x: (x == -1).mean()
+)
+
+print("Flag rate per time window:")
+print(drift_check)
+
+avg_rate = drift_check.mean()
+threshold = avg_rate * 2
+
+alerts = drift_check[drift_check > threshold]
+print(f"\nAverage flag rate: {avg_rate:.4f}")
+print(f"Alert threshold (2x avg): {threshold:.4f}")
+print("Windows exceeding threshold (drift alert):")
+print(alerts)
